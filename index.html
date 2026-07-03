@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="gu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TallyPrime - Ultimate AI & OCR Clone</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        :root {
+            --tally-bg: #002b36;
+            --tally-menu-bg: #073642;
+            --tally-text: #2aa198;
+            --tally-yellow: #b58900;
+        }
+        body { background-color: #f0f4f8; font-family: 'Segoe UI', Arial, sans-serif; }
+        .tally-header { background-color: var(--tally-bg); color: #fff; padding: 10px 20px; font-weight: bold; font-size: 0.9rem; }
+        .gateway-box { background-color: #fff; border: 3px double var(--tally-bg); border-radius: 4px; padding: 0; }
+        .gateway-title { background-color: var(--tally-bg); color: #fff; text-align: center; padding: 5px; font-weight: bold; font-size: 1.1rem; }
+        .menu-item { padding: 8px 20px; cursor: pointer; color: #333; font-weight: 500; transition: 0.2s; }
+        .menu-item:hover { background-color: #e8f5e9; color: #1b5e20; }
+        .menu-item strong { color: #b71c1c; font-size: 1.1rem; }
+        .report-section { display: none; }
+        .report-section.active { display: block; }
+        .tally-table th { background-color: var(--tally-menu-bg) !important; color: white !important; }
+        .total-row { font-weight: bold; background-color: #eaedd5; border-top: 2px solid #000; border-bottom: 2px double #000; }
+        .mode-badge { font-size: 0.85rem; padding: 5px 10px; border-radius: 4px; }
+        .ocr-preview { max-width: 100%; max-height: 200px; margin-top: 10px; display: none; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+
+<div class="tally-header d-flex justify-content-between align-items-center">
+    <span>TallyPrime v3.0 (AI & OCR Hybrid Gujarati Cloud)</span>
+    <span id="current_date_display">2026-07-03</span>
+</div>
+
+<div class="container-fluid my-4">
+    <div class="row">
+        
+        <div class="col-md-3 mb-4">
+            <div class="card p-3 mb-3 bg-light border-secondary">
+                <label class="form-label text-muted mb-1"><strong>🔑 Gemini API Key (વૈકલ્પિક):</strong></label>
+                <input type="password" id="api_key" class="form-control form-control-sm" placeholder="AI એન્ટ્રી માટે કી નાખો..." oninput="toggleEntryMode()">
+                <div class="mt-2">
+                    <span id="mode_status" class="badge mode-badge bg-secondary">મેન્યુઅલ/OCR મોડ સક્રિય</span>
+                </div>
+            </div>
+
+            <div class="gateway-box">
+                <div class="gateway-title">Gateway of Tally</div>
+                <div class="py-2">
+                    <div class="menu-item" onclick="showSection('sec-ledger')"><strong>A</strong>. નવું ખાતું બનાવો (Create Ledger)</div>
+                    <div class="menu-item" onclick="showSection('sec-entry')"><strong>V</strong>. વાઉચર એન્ટ્રી (Voucher Entry)</div>
+                    <div class="menu-item" onclick="showSection('sec-daybook')"><strong>D</strong>. રોજમેળ / આમનોંધ (Daybook)</div>
+                    <hr class="my-1">
+                    <div class="menu-item" onclick="showSection('sec-trial')"><strong>T</strong>. કાચું સરવૈયું (Trial Balance)</div>
+                    <div class="menu-item" onclick="showSection('sec-pl')"><strong>P</strong>. નફા-નુકશાન ખાતું (Profit & Loss)</div>
+                    <div class="menu-item" onclick="showSection('sec-bs')"><strong>B</strong>. પાકું સરવૈયું (Balance Sheet)</div>
+                    <hr class="my-1">
+                    <div class="menu-item text-primary" onclick="exportToTallyXML()"><strong>E</strong>. Tally XML એક્સપોર્ટ કરો</div>
+                    <div class="menu-item text-danger" onclick="clearAllData()"><strong>C</strong>. ડેટા રીસેટ કરો (Reset All)</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-9">
+            <div class="card p-4 bg-white" style="min-height: 520px;">
+                
+                <div id="sec-ledger" class="report-section">
+                    <h3 class="border-bottom pb-2 text-dark">🏗️ નવું ખાતું બનાવો (Create Ledger)</h3>
+                    <div class="row g-3 mt-2" style="max-width: 500px;">
+                        <div>
+                            <label class="form-label">खातानुं नाम (Ledger Name)</label>
+                            <input type="text" id="new_ledger_name" class="form-control" placeholder="દા.ત. સ્ટેશનરી ખર્ચ">
+                        </div>
+                        <div>
+                            <label class="form-label">ખાતાનો પ્રકાર (Under Group)</label>
+                            <select id="new_ledger_type" class="form-select">
+                                <option value="Asset">મિલકત (Asset)</option>
+                                <option value="Liability">દેવું (Liability)</option>
+                                <option value="Equity">મૂડી (Equity)</option>
+                                <option value="Expense">ખર્ચ (Expense)</option>
+                                <option value="Income">આવક (Income)</option>
+                            </select>
+                        </div>
+                        <div><button onclick="addNewLedger()" class="btn btn-primary w-100">ખાતું સેવ કરો</button></div>
+                    </div>
+                    <h5 class="mt-4">હાલના ખાતાઓની યાદી:</h5>
+                    <ul id="ledger_list" class="list-group list-group-flush mt-2" style="max-width: 500px;"></ul>
+                </div>
+
+                <div id="sec-entry" class="report-section active">
+                    <h3 class="border-bottom pb-2 text-success">📝 વાઉચર એન્ટ્રી (Accounting Voucher)</h3>
+                    
+                    <div class="card p-3 mb-3 bg-light border-dashed">
+                        <h5>📷 ફોટો અપલોડ (OCR એન્ટ્રી - API Key વગર ફ્રી)</h5>
+                        <p class="text-muted small mb-2">સ્ટેમેન્ટ કે બિલનો ક્લીન ફોટો અપલોડ કરો, સિસ્ટમ લખાણ આપોઆપ વાંચશે.</p>
+                        <input type="file" id="ocr_file_input" accept="image/*" class="form-control form-control-sm" onchange="processImageOCR()">
+                        <img id="ocr_preview_img" class="ocr-preview" alt="Preview">
+                        <div id="ocr_status_msg" class="mt-2 text-primary font-weight-bold small"></div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">તારીખ</label>
+                            <input type="date" id="tx_date" class="form-control">
+                        </div>
+                        
+                        <div id="ai_form_group" class="col-md-6" style="display:none;">
+                            <label class="form-label">વ્યવહારની વિગત (AI Single Entry)</label>
+                            <input type="text" id="tx_narration" class="form-control" placeholder="વિગત લખો...">
+                        </div>
+
+                        <div id="manual_form_group" class="col-md-6">
+                            <div class="row">
+                                <div class="col-6">
+                                    <label class="form-label">ઉધાર ખાતું (Dr Account)</label>
+                                    <select id="tx_dr_account" class="form-select"></select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">જમા ખાતું (Cr Account)</label>
+                                    <select id="tx_cr_account" class="form-select"></select>
+                                </div>
+                                <div class="col-12 mt-2">
+                                    <label class="form-label">નરેશન / વિગત (OCR દ્વારા ઓટો-ફિલ થશે)</label>
+                                    <input type="text" id="tx_manual_narration" class="form-control" placeholder="વાઉચર વિગત...">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">રકમ (₹)</label>
+                            <input type="number" id="tx_amount" class="form-control" placeholder="0.00">
+                        </div>
+                        
+                        <div class="col-12 mt-3">
+                            <button onclick="submitTransaction()" id="btn_submit" class="btn btn-success px-5">વાઉચર સેવ કરો (Ctrl+S)</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="sec-daybook" class="report-section">
+                    <h3 class="border-bottom pb-2 text-primary">📖 રોજમેળ / આમનોંધ (Daybook)</h3>
+                    <table class="table table-bordered tally-table mt-3">
+                        <thead><tr><th>તારીખ</th><th>વ્યવહારની વિગત</th><th>ઉધાર ખાતું (Dr)</th><th>જમા ખાતું (Cr)</th><th>રકમ (₹)</th></tr></thead>
+                        <tbody id="entries_body"></tbody>
+                    </table>
+                </div>
+
+                <div id="sec-trial" class="report-section">
+                    <h3 class="border-bottom pb-2 text-primary">⚖️ કાચું સરવૈયું (Trial Balance)</h3>
+                    <table class="table table-bordered tally-table mt-3">
+                        <thead><tr><th>વિગત / ખાતાનું નામ</th><th>ઉધાર (Dr) ₹</th><th>જમા (Cr) ₹</th></tr></thead>
+                        <tbody id="trial_body"></tbody>
+                    </table>
+                </div>
+
+                <div id="sec-pl" class="report-section">
+                    <h3 class="border-bottom pb-2 text-primary">📉 નફા-નુકશાન ખાતું (Profit & Loss)</h3>
+                    <div class="row mt-3">
+                        <div class="col-md-6 border-end"><h5 class="text-danger border-bottom pb-1">ખર્ચ (Expenses)</h5><table class="table table-sm" id="pl_expenses_table"></table></div>
+                        <div class="col-md-6"><h5 class="text-success border-bottom pb-1">આવક (Income)</h5><table class="table table-sm" id="pl_income_table"></table></div>
+                    </div>
+                    <table class="table table-bordered mt-2"><tbody id="pl_total_row"></tbody></table>
+                </div>
+
+                <div id="sec-bs" class="report-section">
+                    <h3 class="border-bottom pb-2 text-primary">🏛️ પાકું સરવૈયું (Balance Sheet)</h3>
+                    <div class="row mt-3">
+                        <div class="col-md-6 border-end"><h5 class="text-secondary border-bottom pb-1">મૂડી-દેવા</h5><table class="table table-sm" id="bs_liabilities_table"></table></div>
+                        <div class="col-md-6"><h5 class="text-secondary border-bottom pb-1">લેણાં-મિલકતો</h5><table class="table table-sm" id="bs_assets_table"></table></div>
+                    </div>
+                    <table class="table table-bordered mt-2"><tbody id="bs_total_row"></tbody></table>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let transactions = JSON.parse(localStorage.getItem('ocr_tally_txs')) || [];
+    let defaultLedgers = JSON.parse(localStorage.getItem('ocr_tally_ledgers')) || {
+        "Cash": { type: "Asset", balance: 500000 },
+        "Bank": { type: "Asset", balance: 200000 },
+        "Sales": { type: "Income", balance: 0 },
+        "Purchase": { type: "Expense", balance: 0 },
+        "Office Expense": { type: "Expense", balance: 0 },
+        "Capital Account": { type: "Equity", balance: 700000 }
+    };
+
+    window.onload = function() {
+        document.getElementById('tx_date').value = new Date().toISOString().split('T')[0];
+        if(localStorage.getItem('gemini_api_key_ocr')) {
+            document.getElementById('api_key').value = localStorage.getItem('gemini_api_key_ocr');
+        }
+        updateLedgerUIOptions();
+        toggleEntryMode();
+        calculateAndRender();
+    };
+
+    // 📸 JavaScript OCR પ્રોસેસિંગ લોજિક
+    async function processImageOCR() {
+        const fileInput = document.getElementById('ocr_file_input');
+        const statusMsg = document.getElementById('ocr_status_msg');
+        const previewImg = document.getElementById('ocr_preview_img');
+        
+        if (fileInput.files.length === 0) return;
+
+        const file = fileInput.files[0];
+        previewImg.src = URL.createObjectURL(file);
+        previewImg.style.display = "block";
+        
+        statusMsg.innerText = "⏳ ફોટોમાંથી લખાણ વંચાઈ રહ્યું છે (OCR ચાલુ છે)...";
+
+        try {
+            // Tesseract દ્વારા ઈમેજ-ટુ-ટેક્સ્ટ કન્વર્ઝન
+            const result = await Tesseract.recognize(file, 'eng');
+            const fullText = result.data.text;
+            console.log("OCR Extracted Text: ", fullText);
+
+            // ૧. રકમ (Amount) શોધવાનો દેશી જુગાડ (Regex)
+            // આ લાઈન ટેક્સ્ટમાંથી કરન્સી અને રકમના આંકડા પકડશે
+            const amountMatch = fullText.match(/(?:INR|Rs|Total|₹)?\s?([\d,]+\.\d{2})/i) || fullText.match(/\b([\d,]{3,10})\b/);
+            if (amountMatch) {
+                let parsedAmount = amountMatch[1].replace(/,/g, "");
+                document.getElementById('tx_amount').value = parseFloat(parsedAmount);
+            }
+
+            // ૨. નરેશન / વિગતમાં આખું ટેક્સ્ટ મર્જ કરી ટૂંકું કરવું
+            let cleanNarration = fullText.replace(/\n/g, " ").substring(0, 80);
+            
+            const apiKey = document.getElementById('api_key').value.trim();
+            if (apiKey) {
+                document.getElementById('tx_narration').value = "OCR: " + cleanNarration;
+            } else {
+                document.getElementById('tx_manual_narration').value = "OCR: " + cleanNarration;
+            }
+
+            statusMsg.innerText = "✅ OCR પૂર્ણ! રકમ અને વિગત ઓટો-ફિલ કરી દીધી છે, ખાતાઓ ચકાસી લો.";
+        } catch (error) {
+            console.error(error);
+            statusMsg.innerText = "❌ ફોટો બરાબર વંચાયો નથી. કૃપા કરીને મેન્યુઅલ ટાઈપ કરો.";
+        }
+    }
+
+    // બાકીનું તમામ સ્ટાન્ડર્ડ લોજિક (સેવ, એક્સપોર્ટ, રેન્ડરિંગ) અકબંધ છે
+    function toggleEntryMode() {
+        const apiKey = document.getElementById('api_key').value.trim();
+        const status = document.getElementById('mode_status');
+        const aiForm = document.getElementById('ai_form_group');
+        const manualForm = document.getElementById('manual_form_group');
+        if(apiKey) {
+            localStorage.setItem('gemini_api_key_ocr', apiKey);
+            status.innerText = "AI મોડ સક્રિય"; status.className = "badge mode-badge bg-success";
+            aiForm.style.display = "block"; manualForm.style.display = "none";
+        } else {
+            localStorage.removeItem('gemini_api_key_ocr');
+            status.innerText = "મેન્યુઅલ / OCR મોડ સક્રિય"; status.className = "badge mode-badge bg-secondary";
+            aiForm.style.display = "none"; manualForm.style.display = "block";
+        }
+    }
+
+    function addNewLedger() {
+        const name = document.getElementById('new_ledger_name').value.trim();
+        const type = document.getElementById('new_ledger_type').value;
+        if(!name) { alert('ખાતાનું નામ લખો'); return; }
+        defaultLedgers[name] = { type: type, balance: 0 };
+        localStorage.setItem('ocr_tally_ledgers', JSON.stringify(defaultLedgers));
+        document.getElementById('new_ledger_name').value = '';
+        updateLedgerUIOptions(); calculateAndRender();
+    }
+
+    function updateLedgerUIOptions() {
+        const drSelect = document.getElementById('tx_dr_account');
+        const crSelect = document.getElementById('tx_cr_account');
+        const listContainer = document.getElementById('ledger_list');
+        drSelect.innerHTML = ''; crSelect.innerHTML = ''; listContainer.innerHTML = '';
+        Object.keys(defaultLedgers).forEach(acc => {
+            drSelect.innerHTML += `<option value="${acc}">${acc}</option>`;
+            crSelect.innerHTML += `<option value="${acc}">${acc}</option>`;
+            listContainer.innerHTML += `<li class="list-group-item d-flex justify-content-between"><span>${acc}</span><span class="badge bg-dark">${defaultLedgers[acc].type}</span></li>`;
+        });
+        crSelect.value = "Cash";
+    }
+
+    function showSection(id) {
+        document.querySelectorAll('.report-section').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
+
+    async function askGeminiDoubleEntry(narration, amount) {
+        const apiKey = document.getElementById('api_key').value.trim();
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+        const accountNames = Object.keys(defaultLedgers);
+        const prompt = `You are an expert accountant using Tally ERP. Convert this single entry text into double-entry ledger matching format.\nTransaction text: "${narration}"\nAmount: ${amount}\nYou MUST choose ONLY from these available Ledgers: ${JSON.stringify(accountNames)}\nRespond strictly in this JSON format without markdown blocks:\n{"debit_account": "Ledger Name", "credit_account": "Ledger Name"}`;
+        try {
+            const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
+            const data = await response.json();
+            let text = data.candidates[0].content.parts[0].text.trim().replace(/```json/g, "").replace(/```/g, "").trim();
+            return JSON.parse(text);
+        } catch (error) { return null; }
+    }
+
+    async function submitTransaction() {
+        const date = document.getElementById('tx_date').value;
+        const amount = parseFloat(document.getElementById('tx_amount').value);
+        const apiKey = document.getElementById('api_key').value.trim();
+        const btn = document.getElementById('btn_submit');
+        if(isNaN(amount) || amount <= 0) { alert('રકમ ભરો.'); return; }
+        let newEntry = { date: date, amount: amount };
+
+        if (apiKey) {
+            const narration = document.getElementById('tx_narration').value;
+            btn.disabled = true; const result = await askGeminiDoubleEntry(narration, amount);
+            if(result) { newEntry.narration = narration; newEntry.debit_account = result.debit_account; newEntry.credit_account = result.credit_account; }
+            else { btn.disabled = false; return; }
+        } else {
+            const drAcc = document.getElementById('tx_dr_account').value;
+            const crAcc = document.getElementById('tx_cr_account').value;
+            const manualNarration = document.getElementById('tx_manual_narration').value || "Manual Voucher";
+            if(drAcc === crAcc) { alert('ખાતાઓ અલગ હોવા જોઈએ.'); return; }
+            newEntry.narration = manualNarration; newEntry.debit_account = drAcc; newEntry.credit_account = crAcc;
+        }
+
+        transactions.push(newEntry);
+        localStorage.setItem('ocr_tally_txs', JSON.stringify(transactions));
+        document.getElementById('tx_narration').value = '';
+        document.getElementById('tx_manual_narration').value = '';
+        document.getElementById('tx_amount').value = '';
+        document.getElementById('ocr_file_input').value = '';
+        document.getElementById('ocr_preview_img').style.display = "none";
+        document.getElementById('ocr_status_msg').innerText = "";
+        btn.disabled = false; btn.innerText = "વાઉચર સેવ કરો (Ctrl+S)";
+        calculateAndRender(); showSection('sec-daybook');
+    }
+
+    function calculateAndRender() {
+        let liveAccounts = JSON.parse(JSON.stringify(defaultLedgers));
+        const daybookBody = document.getElementById('entries_body'); daybookBody.innerHTML = '';
+        transactions.forEach(tx => {
+            daybookBody.innerHTML += `<tr><td>${tx.date}</td><td>${tx.narration}</td><td class="text-danger">${tx.debit_account}</td><td class="text-success">${tx.credit_account}</td><td><strong>₹${tx.amount.toFixed(2)}</strong></td></tr>`;
+            if(liveAccounts[tx.debit_account]) liveAccounts[tx.debit_account].balance += tx.amount;
+            if(liveAccounts[tx.credit_account]) liveAccounts[tx.credit_account].balance -= tx.amount;
+        });
+
+        // કાચું સરવૈયું
+        const trialBody = document.getElementById('trial_body'); trialBody.innerHTML = '';
+        let totDr = 0, totCr = 0;
+        for (let name in liveAccounts) {
+            let bal = liveAccounts[name].balance;
+            let dr = bal > 0 ? bal : 0; let cr = bal < 0 ? Math.abs(bal) : 0;
+            if(dr > 0 || cr > 0 || name === "Cash") {
+                trialBody.innerHTML += `<tr><td>${name}</td><td>₹${dr.toFixed(2)}</td><td>₹${cr.toFixed(2)}</td></tr>`;
+                totDr += dr; totCr += cr;
+            }
+        }
+        trialBody.innerHTML += `<tr class="total-row"><td>কુલ સરવાળો (Total)</td><td>₹${totDr.toFixed(2)}</td><td>₹${totCr.toFixed(2)}</td></tr>`;
+
+        // P&L
+        let totalExpenses = 0, totalIncome = 0;
+        const expTable = document.getElementById('pl_expenses_table'); expTable.innerHTML = '';
+        const incTable = document.getElementById('pl_income_table'); incTable.innerHTML = '';
+        for (let name in liveAccounts) {
+            if(liveAccounts[name].type === "Expense") { expTable.innerHTML += `<tr><td>${name}</td><td class="text-end">₹${liveAccounts[name].balance.toFixed(2)}</td></tr>`; totalExpenses += liveAccounts[name].balance; }
+            if(liveAccounts[name].type === "Income") { incTable.innerHTML += `<tr><td>${name}</td><td class="text-end">₹${Math.abs(liveAccounts[name].balance).toFixed(2)}</td></tr>`; totalIncome += Math.abs(liveAccounts[name].balance); }
+        }
+        let netProfit = totalIncome - totalExpenses;
+        document.getElementById('pl_total_row').innerHTML = `<tr class="total-row"><td>ચોખ્ખો નફો (Net Profit): <span class="text-success">₹${netProfit.toFixed(2)}</span></td></tr>`;
+
+        // Balance Sheet
+        const liabTable = document.getElementById('bs_liabilities_table'); liabTable.innerHTML = '';
+        const assTable = document.getElementById('bs_assets_table'); assTable.innerHTML = '';
+        let totalAssets = 0, totalLiab = 0;
+        for (let name in liveAccounts) {
+            if(liveAccounts[name].type === "Asset") { assTable.innerHTML += `<tr><td>${name}</td><td class="text-end">₹${liveAccounts[name].balance.toFixed(2)}</td></tr>`; totalAssets += liveAccounts[name].balance; }
+            if(liveAccounts[name].type === "Equity" || liveAccounts[name].type === "Liability") { liabTable.innerHTML += `<tr><td>${name}</td><td class="text-end">₹${Math.abs(liveAccounts[name].balance).toFixed(2)}</td></tr>`; totalLiab += Math.abs(liveAccounts[name].balance); }
+        }
+        liabTable.innerHTML += `<tr class="text-success"><td>P&L A/c (ચાલુ નફો)</td><td class="text-end">₹${netProfit.toFixed(2)}</td></tr>`; totalLiab += netProfit;
+        document.getElementById('bs_total_row').innerHTML = `<tr class="total-row"><td width="50%">મૂડી-દેવા સરવાળો: ₹${totalLiab.toFixed(2)}</td><td width="50%">મિલકત સરવાળો: ₹${totalAssets.toFixed(2)}</td></tr>`;
+    }
+
+    function exportToTallyXML() {
+        if(transactions.length === 0) return;
+        let xml = `<ENVELOPE>\n<HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER>\n<BODY><IMPORTDATA><REQUESTDESC><REPORTNAME>All Voucher</REPORTNAME></REQUESTDESC><REQUESTDATA>`;
+        transactions.forEach(tx => {
+            const dateStr = tx.date.replace(/-/g, "");
+            xml += `\n<TALLYMESSAGE xmlns:UDF="TallyUDF"><VOUCHER VCHTYPE="Journal" ACTION="Create"><DATE>${dateStr}</DATE><NARRATION>${tx.narration}</NARRATION><VOUCHERTYPENAME>Journal</VOUCHERTYPENAME><ALLLEDGERENTRIES.LIST><LEDGERNAME>${tx.debit_account}</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>-${tx.amount}</AMOUNT></ALLLEDGERENTRIES.LIST><ALLLEDGERENTRIES.LIST><LEDGERNAME>${tx.credit_account}</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${tx.amount}</AMOUNT></ALLLEDGERENTRIES.LIST></VOUCHER></TALLYMESSAGE>`;
+        });
+        xml += `\n</REQUESTDATA></IMPORTDATA></BODY></ENVELOPE>`;
+        const blob = new Blob([xml], { type: 'application/xml' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Tally_OCR_Entries.xml`; a.click();
+    }
+
+    function clearAllData() {
+        if(confirm('રીસેટ કરવું છે?')) { localStorage.clear(); location.reload(); }
+    }
+</script>
+</body>
+</html>
